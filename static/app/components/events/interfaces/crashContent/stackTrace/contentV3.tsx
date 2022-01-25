@@ -227,7 +227,7 @@ export default StackTraceContent;
 
 const Wrapper = styled(Panel)`
   display: grid;
-  grid-template-columns: auto 0.7fr 0.5fr auto 1.5fr;
+  grid-template-columns: auto 1fr 0.5fr auto 1.5fr;
   overflow: hidden;
   font-size: ${p => p.theme.fontSizeSmall};
   line-height: 16px;
@@ -235,7 +235,11 @@ const Wrapper = styled(Panel)`
 
   > * {
     :nth-child(6n - 5) {
-      padding-left: ${space(1)};
+      padding-left: ${space(0.5)};
+    }
+
+    :nth-child(6n - 1) {
+      padding-right: ${space(1)};
     }
 
     :nth-last-child(n + 7) {
