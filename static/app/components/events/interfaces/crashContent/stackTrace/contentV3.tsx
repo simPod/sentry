@@ -17,7 +17,7 @@ type Props = {
   event: Event;
   groupingCurrentLevel?: Group['metadata']['current_level'];
   newestFirst?: boolean;
-  className?: string;
+
   isHoverPreviewed?: boolean;
   includeSystemFrames?: boolean;
   expandFirstFrame?: boolean;
@@ -28,7 +28,6 @@ function StackTraceContent({
   platform,
   event,
   newestFirst,
-  className,
   isHoverPreviewed,
   groupingCurrentLevel,
   includeSystemFrames = true,
@@ -235,7 +234,11 @@ const Wrapper = styled(Panel)`
   color: ${p => p.theme.gray500};
 
   > * {
-    :nth-last-child(n + 6) {
+    :nth-child(6n - 5) {
+      padding-left: ${space(1)};
+    }
+
+    :nth-last-child(n + 7) {
       border-bottom: 1px solid ${p => p.theme.border};
     }
   }

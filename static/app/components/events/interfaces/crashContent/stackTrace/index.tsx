@@ -37,7 +37,6 @@ function StackTrace({
       ) : nativeV2 ? (
         <ContentV3
           data={stacktrace}
-          className="no-exception"
           includeSystemFrames={stackView === STACK_VIEW.FULL}
           platform={platform}
           event={event}

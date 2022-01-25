@@ -26,6 +26,7 @@ import {IconInfo} from 'sentry/icons/iconInfo';
 import {IconQuestion} from 'sentry/icons/iconQuestion';
 import {IconWarning} from 'sentry/icons/iconWarning';
 import {t} from 'sentry/locale';
+import DebugMetaStore, {DebugMetaActions} from 'sentry/stores/debugMetaStore';
 import space from 'sentry/styles/space';
 import {PlatformType, SentryAppComponent} from 'sentry/types';
 import {Event} from 'sentry/types/event';
@@ -105,6 +106,9 @@ function Frame({
   const startingAddress = image ? image.image_addr : null;
   const isAbsolute = traceEventDataSectionContext.activeDisplayOptions.includes(
     DisplayOption.ABSOLUTE_ADDRESSES
+  );
+  const isFullStackTrace = traceEventDataSectionContext.activeDisplayOptions.includes(
+    DisplayOption.FULL_STACK_TRACE
   );
   const isInlineFrame =
     prevFrame &&
@@ -212,12 +216,21 @@ function Frame({
     }
   }
 
+  function makeFilter(addr: string) {
+    if (!(!frame.addrMode || frame.addrMode === 'abs') && image) {
+      return `${image.debug_id}!${addr}`;
+    }
+
+    return addr;
+  }
+
   function scrollToImage(e: React.MouseEvent<HTMLDivElement>) {
     e.stopPropagation(); // to prevent collapsing if collapsible
 
     if (frame.instructionAddr) {
-      DebugMetaActions.updateFilter(makeFilter(instructionAddr));
+      DebugMetaActions.updateFilter(makeFilter(frame.instructionAddr));
     }
+
     scrollToElement('#images-loaded');
   }
 
@@ -229,62 +242,58 @@ function Frame({
   const functionName = getFunctionName();
   const packageStatus = getPackageStatus();
 
-  const Item = styled(
-    ({children, className}: {children: React.ReactNode; className?: string}) => (
-      <div onClick={toggleContext} className={className}>
-        {children}
-      </div>
-    )
-  )`
-    display: flex;
-    ${p => frame.inApp && `background: ${p.theme.surface100};`};
-    ${expandable && `cursor: pointer;`};
-    ${p => p.children && `padding: ${space(1)} ${space(0.5)};`};
-  `;
+  const commonItemProps = {
+    onClick: expandable ? toggleContext : undefined,
+    inApp: frame.inApp,
+  };
 
   return (
     <Fragment>
       <StrictClick onClick={expandable ? toggleContext : undefined}>
         {platform === 'objc' || platform === 'cocoa' || platform === 'native' ? (
           <Fragment>
-            <Item>
+            <Status {...commonItemProps}>
               {(packageStatus === 'error' || packageStatus === undefined) && (
                 <Tooltip
                   title={t('Go to images loaded')}
                   containerDisplayMode="inline-flex"
                 >
-                  <PackageStatus onClick={scrollToImage}>
-                    {packageStatus === 'error' ? (
-                      <IconQuestion size="sm" color="red300" />
-                    ) : (
-                      <IconWarning size="sm" color="red300" />
-                    )}
-                  </PackageStatus>
+                  {packageStatus === 'error' ? (
+                    <IconQuestion size="sm" color="red300" />
+                  ) : (
+                    <IconWarning size="sm" color="red300" />
+                  )}
                 </Tooltip>
               )}
-            </Item>
-            <Item>
+            </Status>
+            <Name {...commonItemProps}>
+              {!isFullStackTrace && !isExpanded && leadsToApp && (
+                <Fragment>
+                  {!nextFrame ? t('Crashed in non-app') : t('Called from')}
+                  {':'}&nbsp;
+                </Fragment>
+              )}
               {defined(frame.package) ? (
                 <Tooltip
                   title={frame.package}
                   delay={isHoverPreviewed ? STACKTRACE_PREVIEW_TOOLTIP_DELAY : undefined}
                 >
-                  <PackageName>{trimPackage(frame.package)}</PackageName>
+                  {trimPackage(frame.package)}
                 </Tooltip>
               ) : (
                 `<${t('unknown')}>`
               )}
-            </Item>
-            <Item>
+            </Name>
+            <Address {...commonItemProps}>
               <Tooltip
                 title={tooltipTitle}
                 disabled={!(isFoundByStackScanning || isInlineFrame)}
                 delay={tooltipDelay}
               >
-                <Address>{formattedAddress}</Address>
+                {formattedAddress}
               </Tooltip>
-            </Item>
-            <Item>
+            </Address>
+            <Grouping {...commonItemProps}>
               {isUsedForGrouping && (
                 <Tooltip
                   title={t(
@@ -295,8 +304,8 @@ function Frame({
                   <IconInfo size="xs" color="gray300" />
                 </Tooltip>
               )}
-            </Item>
-            <Item>
+            </Grouping>
+            <FunctionName {...commonItemProps}>
               <FunctionNameWrapper>
                 {functionName ? (
                   <AnnotatedText value={functionName.value} meta={functionName.meta} />
@@ -319,7 +328,7 @@ function Frame({
                   </ToggleButton>
                 )}
               </FunctionNameWrapper>
-            </Item>
+            </FunctionName>
           </Fragment>
         ) : (
           <Default
@@ -330,51 +339,76 @@ function Frame({
           />
         )}
       </StrictClick>
-      {isExpanded && (
-        <Registers
-          frame={frame}
-          event={event}
-          registers={registers}
-          components={components}
-          hasContextSource={hasContextSource(frame)}
-          hasContextVars={hasContextVars(frame)}
-          hasContextRegisters={hasContextRegisters(registers)}
-          emptySourceNotation={emptySourceNotation}
-          hasAssembly={hasAssembly(frame, platform)}
-          expandable={expandable}
-          isExpanded={isExpanded}
-        />
-      )}
+      <Registers isExpanded={isExpanded}>
+        {isExpanded && (
+          <RegistersContent
+            frame={frame}
+            event={event}
+            registers={registers}
+            components={components}
+            hasContextSource={hasContextSource(frame)}
+            hasContextVars={hasContextVars(frame)}
+            hasContextRegisters={hasContextRegisters(registers)}
+            emptySourceNotation={emptySourceNotation}
+            hasAssembly={hasAssembly(frame, platform)}
+            expandable={expandable}
+            isExpanded={isExpanded}
+          />
+        )}
+      </Registers>
     </Fragment>
   );
 }
 
 export default withSentryAppComponents(Frame, {componentType: 'stacktrace-link'});
 
+const Item = styled('div')<{
+  inApp: boolean;
+  onClick?: (evt: React.MouseEvent) => void;
+}>`
+  display: flex;
+  white-space: pre-wrap;
+  word-break: break-all;
+  ${p => p.inApp && `background: ${p.theme.surface100};`};
+  ${p => p.onClick && `cursor: pointer;`};
+  ${p => p.children && `padding: ${space(1)} ${space(0.5)};`};
+`;
+
+const Status = styled(Item)``;
+
+const Name = styled(Item)``;
+
+const Address = styled(Item)`
+  font-family: ${p => p.theme.text.familyMono};
+`;
+
+const Grouping = styled(Item)``;
+
+const FunctionName = styled(Item)``;
+
+const Registers = styled('div')<{isExpanded: boolean}>`
+  grid-column: 1/-1;
+  ${p =>
+    !p.isExpanded &&
+    `
+      && {
+        border-bottom: none;
+      }
+    `};
+`;
+
+const RegistersContent = styled(Context)`
+  margin: ${space(1)} 0;
+  padding: ${space(1)};
+`;
+
 const ToggleButton = styled(Button)`
   width: 16px;
   height: 16px;
-`;
-
-const Address = styled('div')`
-  font-family: ${p => p.theme.text.familyMono};
 `;
 
 const FunctionNameWrapper = styled('div')`
   width: 100%;
   display: grid;
   grid-template-columns: 1fr auto;
-`;
-
-const Registers = styled(Context)`
-  grid-column: 1/-1;
-  margin: ${space(1)} 0;
-`;
-
-const PackageName = styled('div')`
-  white-space: pre;
-`;
-
-const PackageStatus = styled('div')`
-  cursor: pointer;
 `;
