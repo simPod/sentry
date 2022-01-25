@@ -98,7 +98,6 @@ class IntegrationEventAction(EventAction):
         return self.form_cls(self.data, integrations=self.get_integrations())
 
 
-
 def get_linked_issue_ids(event, integration):
     return _linked_issues(event, integration).values_list("key", flat=True)
 
